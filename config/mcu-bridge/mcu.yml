@@ -1,0 +1,50 @@
+# MCU bridge config
+# Add one entry per connected MCU. Supported types:
+#   klipper   — Moonraker HTTP API
+#   serial    — Raw G-code / custom firmware over serial
+#   modbus    — Modbus RTU over serial
+
+mcus:
+  - id: mcu_0
+    type: serial
+    port: /dev/ttyUSB0
+    baud: 115200
+    # Protocol: "gcode" | "raw" | "json-lines"
+    protocol: gcode
+    # How often to request sensor data (seconds)
+    poll_interval: 1.0
+    # Map MCU sensor labels → MQTT topics
+    sensors:
+      T0: "mcu/sensor/mcu_0/temp_0"
+      T1: "mcu/sensor/mcu_0/temp_1"
+      V0: "mcu/sensor/mcu_0/voltage_0"
+      I0: "mcu/sensor/mcu_0/current_0"
+    # Map MQTT output topics → MCU command templates
+    outputs:
+      mcu/output/relay_0: "M42 P0 S{value}"   # set pin value
+      mcu/output/pwm_0:   "M42 P1 S{value}"
+      mcu/output/estop:   "M112"               # emergency stop
+
+  # Example: Klipper/Moonraker connected printer/controller
+  # - id: klipper_0
+  #   type: klipper
+  #   moonraker_url: http://192.168.1.50:7125
+  #   poll_interval: 1.0
+  #   sensors:
+  #     extruder: "mcu/sensor/klipper_0/temp_extruder"
+  #     heater_bed: "mcu/sensor/klipper_0/temp_bed"
+  #   outputs:
+  #     mcu/output/klipper_0/extruder_temp: null   # handled via Moonraker API
+
+  # Example: Modbus RTU device (e.g. power supply, VFD)
+  # - id: modbus_psu
+  #   type: modbus
+  #   port: /dev/ttyUSB1
+  #   baud: 9600
+  #   slave_id: 1
+  #   poll_interval: 2.0
+  #   registers:
+  #     - { address: 0x0000, name: voltage,  scale: 0.01, topic: "mcu/sensor/psu/voltage" }
+  #     - { address: 0x0001, name: current,  scale: 0.01, topic: "mcu/sensor/psu/current" }
+  #   coils:
+  #     mcu/output/psu/enable: { address: 0x0000 }

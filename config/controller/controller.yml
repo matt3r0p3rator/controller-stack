@@ -1,0 +1,25 @@
+# Controller service config — overridden by environment variables where noted
+controller:
+  # Poll interval for the active profile's control loop (seconds)
+  loop_interval: 1.0
+  # Safety watchdog: if no MCU heartbeat received within this window (seconds),
+  # trigger emergency stop
+  watchdog_timeout: 10
+
+mqtt:
+  host: "${MQTT_HOST}"
+  port: "${MQTT_PORT}"
+  # Topics published by the controller
+  topics:
+    state: "controller/state"
+    command: "controller/command"
+    alarm: "controller/alarm"
+    setpoint: "controller/setpoint"
+    # Per-channel output commands sent to the MCU bridge
+    output: "mcu/output/{channel}"
+
+influx:
+  url: "${INFLUX_URL}"
+  token: "${INFLUX_TOKEN}"
+  org: "${INFLUX_ORG}"
+  bucket: "${INFLUX_BUCKET}"

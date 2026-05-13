@@ -1,0 +1,124 @@
+version: "3.9"
+
+networks:
+  controller-net:
+    driver: bridge
+
+volumes:
+  influxdb-data:
+  grafana-data:
+  nodered-data:
+  mosquitto-data:
+  mosquitto-log:
+
+services:
+
+  # ─── MQTT Broker ────────────────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    networks: [controller-net]
+    ports:
+      - "1883:1883"   # MQTT (internal MCU/device access)
+      - "9001:9001"   # WebSocket (browser clients)
+    volumes:
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+
+  # ─── Time-Series Database ───────────────────────────────────────────────────
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    restart: unless-stopped
+    networks: [controller-net]
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USER:-admin}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD:-changeme123}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG:-controller}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET:-process}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:-super-secret-token-change-me}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+
+  # ─── Dashboards ─────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    restart: unless-stopped
+    networks: [controller-net]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-changeme123}
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+
+  # ─── Visual Flow Programming ─────────────────────────────────────────────────
+  nodered:
+    image: nodered/node-red:latest
+    container_name: nodered
+    restart: unless-stopped
+    networks: [controller-net]
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - nodered-data:/data
+      - ./config/nodered/settings.js:/data/settings.js:ro
+
+  # ─── Process Controller Core ─────────────────────────────────────────────────
+  controller:
+    build:
+      context: ./services/controller
+      dockerfile: Dockerfile
+    container_name: controller
+    restart: unless-stopped
+    networks: [controller-net]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-super-secret-token-change-me}
+      INFLUX_ORG: ${INFLUX_ORG:-controller}
+      INFLUX_BUCKET: ${INFLUX_BUCKET:-process}
+      PROFILE: ${CONTROLLER_PROFILE:-electrolysis}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./profiles:/app/profiles:ro
+      - ./config/controller:/app/config:ro
+
+  # ─── MCU Communication Bridge ────────────────────────────────────────────────
+  mcu-bridge:
+    build:
+      context: ./services/mcu-bridge
+      dockerfile: Dockerfile
+    container_name: mcu-bridge
+    restart: unless-stopped
+    networks: [controller-net]
+    privileged: true          # required for direct serial port access
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0   # adjust to your serial device
+      # - /dev/ttyACM0:/dev/ttyACM0
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      MCU_CONFIG: /app/config/mcu.yml
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./config/mcu-bridge:/app/config:ro
+
+  # ─── Reverse Proxy / UI Gateway ──────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    networks: [controller-net]
+    ports:
+      - "80:80"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro

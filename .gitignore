@@ -1,0 +1,10 @@
+.env
+mosquitto/data/
+mosquitto/log/
+influxdb/
+grafana/
+nodered/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
