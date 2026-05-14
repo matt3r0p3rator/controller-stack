@@ -1,50 +1,87 @@
-# MCU bridge config
-# Add one entry per connected MCU. Supported types:
-#   klipper   — Moonraker HTTP API
-#   serial    — Raw G-code / custom firmware over serial
-#   modbus    — Modbus RTU over serial
+# ─────────────────────────────────────────────────────────────────────────────
+# MCU Bridge configuration
+#
+# Supported driver types:
+#   serial   — any UART/USB microcontroller running G-code or custom firmware
+#   modbus   — Modbus RTU device (VFD, PLC, smart PSU, etc.)
+#   klipper  — Klipper printer board via Moonraker HTTP API
+#
+# Only the active entries (un-commented) are loaded.  Add or duplicate blocks
+# for multiple simultaneous devices.
+# ─────────────────────────────────────────────────────────────────────────────
 
 mcus:
+
+  # ── Serial / G-code MCU (Arduino, STM32, custom firmware) ─────────────────
+  # Wiring:  host USB → /dev/ttyUSB0  (adjust in docker-compose devices: list)
+  #
+  # Sensor polling:
+  #   The bridge sends "M105" every poll_interval seconds.
+  #   Firmware replies with:  ok T0:25.2 /0.0 T1:24.8 /0.0 V0:12.05 I0:3.10
+  #   Keys in that reply (T0, T1, V0, I0) are matched to the sensors map below.
+  #
+  # Output commands:
+  #   When the controller publishes to an output topic the bridge substitutes
+  #   {value} in the template and sends the G-code line over serial.
   - id: mcu_0
     type: serial
-    port: /dev/ttyUSB0
+    port: /dev/ttyUSB0           # host device — mapped in docker-compose
     baud: 115200
-    # Protocol: "gcode" | "raw" | "json-lines"
-    protocol: gcode
-    # How often to request sensor data (seconds)
-    poll_interval: 1.0
-    # Map MCU sensor labels → MQTT topics
+    protocol: gcode              # gcode | raw | json-lines
+    poll_interval: 1.0           # seconds between M105 polls
+
+    # MCU sensor key  →  MQTT topic published to the broker
     sensors:
-      T0: "mcu/sensor/mcu_0/temp_0"
-      T1: "mcu/sensor/mcu_0/temp_1"
-      V0: "mcu/sensor/mcu_0/voltage_0"
-      I0: "mcu/sensor/mcu_0/current_0"
-    # Map MQTT output topics → MCU command templates
+      T0: "mcu/sensor/mcu_0/temp_0"       # electrolyte temperature (°C)
+      T1: "mcu/sensor/mcu_0/temp_1"       # ambient / case temperature (°C)
+      V0: "mcu/sensor/mcu_0/voltage_0"    # cell voltage (V)
+      I0: "mcu/sensor/mcu_0/current_0"    # cell current (A)
+
+    # MQTT topic the controller writes to  →  G-code command sent to the MCU
+    # {value} is replaced with the raw MQTT payload at runtime
     outputs:
-      mcu/output/relay_0: "M42 P0 S{value}"   # set pin value
-      mcu/output/pwm_0:   "M42 P1 S{value}"
-      mcu/output/estop:   "M112"               # emergency stop
+      mcu/output/relay_0: "M42 P0 S{value}"   # digital pin 0 — cell relay
+      mcu/output/pwm_0:   "M42 P1 S{value}"   # pin 1 — DC-DC PWM duty (0-255)
+      mcu/output/estop:   "M112"               # emergency stop (ignores value)
 
-  # Example: Klipper/Moonraker connected printer/controller
-  # - id: klipper_0
-  #   type: klipper
-  #   moonraker_url: http://192.168.1.50:7125
-  #   poll_interval: 1.0
-  #   sensors:
-  #     extruder: "mcu/sensor/klipper_0/temp_extruder"
-  #     heater_bed: "mcu/sensor/klipper_0/temp_bed"
-  #   outputs:
-  #     mcu/output/klipper_0/extruder_temp: null   # handled via Moonraker API
 
-  # Example: Modbus RTU device (e.g. power supply, VFD)
+  # ── Modbus RTU device (power supply, VFD, energy meter, PLC) ──────────────
+  # Wiring:  RS-485 adapter → /dev/ttyUSB1
+  #
+  # registers:  read holding registers (FC 03).
+  #   address — register address (hex or decimal)
+  #   scale   — raw value × scale = engineering value  (e.g. 0.01 → centiunits)
+  #   topic   — MQTT topic the scaled value is published to
+  #
+  # coils:  write single coil (FC 05).
+  #   MQTT payload "1" → coil ON,  "0" → coil OFF
+  #
   # - id: modbus_psu
   #   type: modbus
   #   port: /dev/ttyUSB1
   #   baud: 9600
-  #   slave_id: 1
+  #   slave_id: 1                # Modbus slave address on the RS-485 bus
   #   poll_interval: 2.0
   #   registers:
-  #     - { address: 0x0000, name: voltage,  scale: 0.01, topic: "mcu/sensor/psu/voltage" }
-  #     - { address: 0x0001, name: current,  scale: 0.01, topic: "mcu/sensor/psu/current" }
+  #     - { address: 0x0000, name: voltage, scale: 0.01, topic: "mcu/sensor/psu/voltage" }
+  #     - { address: 0x0001, name: current, scale: 0.01, topic: "mcu/sensor/psu/current" }
+  #     - { address: 0x0002, name: power,   scale: 0.1,  topic: "mcu/sensor/psu/power"   }
   #   coils:
-  #     mcu/output/psu/enable: { address: 0x0000 }
+  #     mcu/output/psu/enable: { address: 0x0000 }   # master on/off coil
+
+
+  # ── Klipper / Moonraker (printer board or Klipper-based controller) ────────
+  # No serial port needed — communicates over the network via HTTP.
+  # moonraker_url must be reachable from inside the mcu-bridge container.
+  #
+  # sensors:  Moonraker object key  →  MQTT topic
+  #   Key is the Klipper object name returned by /printer/objects/query
+  #   e.g. "extruder", "heater_bed", "temperature_sensor chamber"
+  #
+  # - id: klipper_0
+  #   type: klipper
+  #   moonraker_url: http://192.168.1.50:7125   # Moonraker address on your LAN
+  #   poll_interval: 1.0
+  #   sensors:
+  #     extruder:    "mcu/sensor/klipper_0/temp_extruder"
+  #     heater_bed:  "mcu/sensor/klipper_0/temp_bed"

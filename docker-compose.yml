@@ -10,6 +10,7 @@ volumes:
   nodered-data:
   mosquitto-data:
   mosquitto-log:
+  openplc-data:
 
 services:
 
@@ -54,7 +55,11 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-changeme123}
-      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+      GF_SERVER_ROOT_URL: http://localhost:8081/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-super-secret-token-change-me}
+      INFLUX_ORG: ${INFLUX_ORG:-controller}
+      INFLUX_BUCKET: ${INFLUX_BUCKET:-process}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -67,9 +72,11 @@ services:
     networks: [controller-net]
     environment:
       TZ: ${TZ:-UTC}
+      NODE_RED_EXTRA_PACKAGES: node-red-node-python3
     volumes:
       - nodered-data:/data
       - ./config/nodered/settings.js:/data/settings.js:ro
+      - ./scripts:/data/scripts:ro
 
   # ─── Process Controller Core ─────────────────────────────────────────────────
   controller:
@@ -112,13 +119,37 @@ services:
     volumes:
       - ./config/mcu-bridge:/app/config:ro
 
+  # ─── OpenPLC Runtime ───────────────────────────────────────────────────────
+  openplc:
+    build:
+      context: https://github.com/thiagoralves/OpenPLC_v3.git
+      dockerfile: Dockerfile
+    container_name: openplc
+    restart: unless-stopped
+    networks: [controller-net]
+    ports:
+      - "8502:502"    # Modbus TCP (host access for debugging)
+      - "8180:8080"   # OpenPLC web IDE (v3 browser interface)
+      - "8443:8443"   # OpenPLC REST API / Editor connection (v4-style, HTTPS)
+    environment:
+      OPENPLC_USER: ${OPENPLC_USER:-openplc}
+      OPENPLC_PASSWORD: ${OPENPLC_PASSWORD:-changeme123}
+    volumes:
+      - openplc-data:/docker_persistent
+
   # ─── Reverse Proxy / UI Gateway ──────────────────────────────────────────────
   nginx:
     image: nginx:alpine
     container_name: nginx
     restart: unless-stopped
     networks: [controller-net]
+    depends_on:
+      - grafana
+      - nodered
+      - controller
+      - influxdb
+      - openplc
     ports:
-      - "80:80"
+      - "8081:80"
     volumes:
       - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro

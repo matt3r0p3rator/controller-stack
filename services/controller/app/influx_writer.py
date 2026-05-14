@@ -31,7 +31,7 @@ class InfluxWriter:
                 point = point.tag(k, str(v))
         for k, v in fields.items():
             point = point.field(k, v)
-        point = point.time(datetime.now(timezone.utc), WritePrecision.NANOSECONDS)
+        point = point.time(datetime.now(timezone.utc), WritePrecision.NS)
         try:
             self._write_api.write(bucket=self._bucket, org=self._org, record=point)
         except Exception:
