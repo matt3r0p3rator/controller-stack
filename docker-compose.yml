@@ -126,6 +126,15 @@ services:
     container_name: forte
     restart: unless-stopped
     networks: [controller-net]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      MQTT_TOPIC: controller/sim/sine
+      SINE_AMPLITUDE: "10.0"
+      SINE_FREQUENCY_HZ: "0.1"
+      SINE_STEP_SECONDS: "0.5"
+    depends_on:
+      - mosquitto
     ports:
       - "61499:61499" # FORTE management/communication endpoint
 
