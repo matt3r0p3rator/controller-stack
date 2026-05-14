@@ -30,6 +30,7 @@ Browser / REST client
 | nodered       | nodered/node-red              | Visual flow / sequence programming               |
 | controller    | ./services/controller         | Control loop, profile engine, REST API           |
 | mcu-bridge    | ./services/mcu-bridge         | Serial / Moonraker / Modbus MCU communication    |
+| forte         | ./services/plc-runtime        | IEC 61499 runtime (Eclipse 4diac FORTE)          |
 | nginx         | nginx:alpine                  | Reverse proxy, single-port entry point           |
 
 ---
@@ -168,3 +169,16 @@ See `config/mcu-bridge/mcu.yml` for full example configuration of each type.
 - The `mcu-bridge` container runs `privileged: true` for serial port access.
   Scope it down to only the required `devices:` entries.
 - Node-RED editor is enabled by default. Set `NODERED_EDITOR=false` to disable in `.env`.
+
+---
+
+## GitHub Build-Only PLC Runtime
+
+This repo now includes a FORTE-based PLC runtime Dockerfile at `services/plc-runtime/Dockerfile`.
+
+GitHub Actions workflow `build-plc-runtime.yml` is configured to:
+- Build the image on `main` and `testing` branches
+- Run on push and pull request when PLC runtime files change
+- Build only (no image push, no deploy)
+
+You can use `testing` as your branch for validation while keeping `main` as your stable branch.

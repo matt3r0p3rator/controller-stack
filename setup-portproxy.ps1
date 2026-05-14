@@ -30,7 +30,7 @@ Write-Host "Starting Docker and stack..."
 wsl -d Ubuntu-22.04 -- bash -c "service docker start; cd /mnt/c/Users/gigab/controller-stack; docker compose up -d" | Out-Null
 Write-Host "Stack started." -ForegroundColor Green
 
-$ports = @(8081, 8086, 1883, 9001)
+$ports = @(8081, 8086, 1883, 9001, 61499)
 
 foreach ($port in $ports) {
     netsh interface portproxy add v4tov4 listenport=$port listenaddress=0.0.0.0 connectport=$port connectaddress=$wslIp
@@ -48,7 +48,7 @@ netsh interface portproxy show all
 
 Write-Host ""
 Write-Host "Verifying Windows is listening..." -ForegroundColor Cyan
-netstat -ano | findstr "LISTENING" | findstr -E ":8081 |:8086 |:1883 "
+netstat -ano | findstr "LISTENING" | findstr -E ":8081 |:8086 |:1883 |:61499 "
 
 Write-Host ""
 Write-Host "Done. Press Enter to close." -ForegroundColor Green

@@ -10,7 +10,6 @@ volumes:
   nodered-data:
   mosquitto-data:
   mosquitto-log:
-  openplc-data:
 
 services:
 
@@ -119,23 +118,16 @@ services:
     volumes:
       - ./config/mcu-bridge:/app/config:ro
 
-  # ─── OpenPLC Runtime ───────────────────────────────────────────────────────
-  openplc:
+  # ─── FORTE Runtime (IEC 61499) ───────────────────────────────────────────
+  forte:
     build:
-      context: https://github.com/thiagoralves/OpenPLC_v3.git
+      context: ./services/plc-runtime
       dockerfile: Dockerfile
-    container_name: openplc
+    container_name: forte
     restart: unless-stopped
     networks: [controller-net]
     ports:
-      - "8502:502"    # Modbus TCP (host access for debugging)
-      - "8180:8080"   # OpenPLC web IDE (v3 browser interface)
-      - "8443:8443"   # OpenPLC REST API / Editor connection (v4-style, HTTPS)
-    environment:
-      OPENPLC_USER: ${OPENPLC_USER:-openplc}
-      OPENPLC_PASSWORD: ${OPENPLC_PASSWORD:-changeme123}
-    volumes:
-      - openplc-data:/docker_persistent
+      - "61499:61499" # FORTE management/communication endpoint
 
   # ─── Reverse Proxy / UI Gateway ──────────────────────────────────────────────
   nginx:
@@ -148,7 +140,6 @@ services:
       - nodered
       - controller
       - influxdb
-      - openplc
     ports:
       - "8081:80"
     volumes:
